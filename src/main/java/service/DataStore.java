@@ -35,6 +35,13 @@ public class DataStore {
         return Optional.ofNullable(customers.get(customerId));
     }
 
+    public Optional<Customer> findCustomerByEmail(String email) {
+        return customers.values().stream()
+                .filter(customer -> customer.getEmail() != null)
+                .filter(customer -> customer.getEmail().equalsIgnoreCase(email))
+                .findFirst();
+    }
+
     public Collection<Customer> getAllCustomers() {
         return new ArrayList<>(customers.values());
     }
@@ -45,6 +52,13 @@ public class DataStore {
 
     public Optional<Staff> findStaffById(String staffId) {
         return Optional.ofNullable(staffMembers.get(staffId));
+    }
+
+    public Optional<Staff> findStaffByEmail(String email) {
+        return staffMembers.values().stream()
+                .filter(staff -> staff.getEmail() != null)
+                .filter(staff -> staff.getEmail().equalsIgnoreCase(email))
+                .findFirst();
     }
 
     public Collection<Staff> getAllStaffMembers() {

@@ -5,6 +5,9 @@ import model.Restaurant;
 
 import java.time.LocalDateTime;
 
+/**
+ * Shared validation rules for service methods and UI-facing workflows.
+ */
 public class ValidationService {
     public boolean isNonBlank(String value) {
         return value != null && !value.trim().isEmpty();
@@ -24,6 +27,21 @@ public class ValidationService {
 
     public boolean isValidRating(int rating) {
         return rating >= 1 && rating <= 5;
+    }
+
+    public void validateReview(Customer customer, Restaurant restaurant, int rating, String comment) {
+        if (customer == null) {
+            throw new IllegalArgumentException("Customer is required.");
+        }
+        if (restaurant == null) {
+            throw new IllegalArgumentException("Restaurant is required.");
+        }
+        if (!isValidRating(rating)) {
+            throw new IllegalArgumentException("Rating must be between 1 and 5.");
+        }
+        if (!isNonBlank(comment)) {
+            throw new IllegalArgumentException("Review comment is required.");
+        }
     }
 
     public void validateAvailabilitySearch(

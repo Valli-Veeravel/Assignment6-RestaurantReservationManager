@@ -26,7 +26,28 @@ mvn test
 
 ## Run
 
-No JavaFX application entry point exists yet because the UI is intentionally out of scope for this first skeleton. JavaFX run instructions will be added when the UI is implemented.
+```bash
+mvn javafx:run
+```
+
+The app opens with a login / role selection screen. Use one of the seeded demo accounts to test the reservation, waitlist, approval, cancellation, and review workflows.
+
+## Demo Logins
+
+### Customers
+
+| Name | Email | Password |
+| --- | --- | --- |
+| Ava Customer | `ava@example.com` | `ava123` |
+| Ben Customer | `ben@example.com` | `ben123` |
+
+### Staff
+
+| Name | Restaurant | Position | Email | Password |
+| --- | --- | --- | --- | --- |
+| Sam Staff | Downtown Bistro | Server | `sam@example.com` | `sam123` |
+| Mia Manager | Garden Table | Manager | `mia@example.com` | `mia123` |
+| Leo Harbor | Harbor Grill | Server | `leo@example.com` | `leo123` |
 
 ## Notes
 

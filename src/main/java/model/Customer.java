@@ -13,7 +13,11 @@ public class Customer extends User {
     private List<String> reservationIds;
 
     public Customer(String userId, String customerId, String name, String email, String phoneNumber) {
-        super(userId, name, email, phoneNumber);
+        this(userId, customerId, name, email, phoneNumber, "password");
+    }
+
+    public Customer(String userId, String customerId, String name, String email, String phoneNumber, String password) {
+        super(userId, name, email, phoneNumber, password);
         this.customerId = customerId;
         this.reservationIds = new ArrayList<>();
     }

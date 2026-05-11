@@ -5,12 +5,18 @@ public abstract class User {
     private String name;
     private String email;
     private String phoneNumber;
+    private String password;
 
     protected User(String userId, String name, String email, String phoneNumber) {
+        this(userId, name, email, phoneNumber, "password");
+    }
+
+    protected User(String userId, String name, String email, String phoneNumber, String password) {
         this.userId = userId;
         this.name = name;
         this.email = email;
         this.phoneNumber = phoneNumber;
+        this.password = password;
     }
 
     public String getUserId() {
@@ -43,6 +49,18 @@ public abstract class User {
 
     public void setPhoneNumber(String phoneNumber) {
         this.phoneNumber = phoneNumber;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public boolean passwordMatches(String password) {
+        return this.password != null && this.password.equals(password);
     }
 
     public void updateContactInfo(String email, String phoneNumber) {
