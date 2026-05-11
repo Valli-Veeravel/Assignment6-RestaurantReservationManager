@@ -5,6 +5,7 @@ import model.Customer;
 import model.Reservation;
 import model.ReservationStatus;
 import model.Restaurant;
+import model.Review;
 import model.Staff;
 import org.junit.jupiter.api.Test;
 import service.ReservationManager;
@@ -102,6 +103,22 @@ class ReservationManagerTest {
     }
 
     @Test
+    void duplicateWaitlistEntriesForSameRequestAreIgnored() {
+        Restaurant restaurant = new Restaurant("restaurant-1", "Test Bistro", "1 Main St", 40);
+        Customer customer = new Customer("user-1", "customer-1", "Ava Customer", "ava@example.com", "555-0100");
+        ReservationManager manager = new ReservationManager("manager-1");
+        LocalDateTime slot = LocalDateTime.now().plusDays(1);
+        restaurant.getAvailabilitySchedule().setCapacity(slot, 1);
+
+        assertTrue(manager.joinWaitlist(customer, restaurant, slot, 2));
+        assertTrue(manager.joinWaitlist(customer, restaurant, slot, 2));
+
+        assertEquals(1, restaurant.getWaitlist().size());
+        assertEquals(1, manager.getWaitlistRecords().size());
+        assertEquals(customer, restaurant.getWaitlist().peekNextCustomer().orElseThrow());
+    }
+
+    @Test
     void reservationStatusUpdatesReserveAndReleaseCapacity() {
         Restaurant restaurant = new Restaurant("restaurant-1", "Test Bistro", "1 Main St", 40);
         Customer customer = new Customer("user-1", "customer-1", "Ava Customer", "ava@example.com", "555-0100");
@@ -123,6 +140,34 @@ class ReservationManagerTest {
         assertTrue(manager.getReservationsForCustomer(customer).isEmpty());
         assertTrue(manager.getNotificationsForCustomer(customer).stream()
                 .anyMatch(notification -> notification.getMessage().contains("CANCELLED")));
+    }
+
+    @Test
+    void cancellingPendingReservationDoesNotReleaseCapacityButCancellingAcceptedReservationDoes() {
+        Restaurant restaurant = new Restaurant("restaurant-1", "Test Bistro", "1 Main St", 40);
+        Customer firstCustomer = new Customer("user-1", "customer-1", "Ava Customer", "ava@example.com", "555-0100");
+        Customer secondCustomer = new Customer("user-2", "customer-2", "Ben Customer", "ben@example.com", "555-0101");
+        ReservationManager manager = new ReservationManager("manager-1");
+        LocalDateTime slot = LocalDateTime.now().plusDays(1);
+        restaurant.getAvailabilitySchedule().setCapacity(slot, 4);
+
+        Reservation pendingReservation = manager.createRequest(firstCustomer, restaurant, slot, 2).orElseThrow();
+        manager.cancelReservation(pendingReservation);
+
+        assertEquals(ReservationStatus.CANCELLED, pendingReservation.getStatus());
+        assertEquals(4, restaurant.getAvailabilitySchedule().getCapacity(slot));
+        assertTrue(manager.getReservationsForCustomer(firstCustomer).isEmpty());
+
+        Reservation acceptedReservation = manager.createRequest(secondCustomer, restaurant, slot, 2).orElseThrow();
+        manager.acceptReservation(acceptedReservation);
+
+        assertEquals(2, restaurant.getAvailabilitySchedule().getCapacity(slot));
+
+        manager.cancelReservation(acceptedReservation);
+
+        assertEquals(ReservationStatus.CANCELLED, acceptedReservation.getStatus());
+        assertEquals(4, restaurant.getAvailabilitySchedule().getCapacity(slot));
+        assertTrue(manager.getReservationsForCustomer(secondCustomer).isEmpty());
     }
 
     @Test
@@ -152,6 +197,51 @@ class ReservationManagerTest {
         assertEquals(2, restaurant.getAvailabilitySchedule().getCapacity(slot));
         assertTrue(manager.getNotificationsForCustomer(waitlistedCustomer).stream()
                 .anyMatch(notification -> notification.getMessage().contains("waitlist request is now PENDING")));
+    }
+
+    @Test
+    void customerNotificationsAreStoredForOnlyTheAffectedCustomer() {
+        Restaurant restaurant = new Restaurant("restaurant-1", "Test Bistro", "1 Main St", 40);
+        Customer customer = new Customer("user-1", "customer-1", "Ava Customer", "ava@example.com", "555-0100");
+        Customer otherCustomer = new Customer("user-2", "customer-2", "Ben Customer", "ben@example.com", "555-0101");
+        ReservationManager manager = new ReservationManager("manager-1");
+        LocalDateTime slot = LocalDateTime.now().plusDays(1);
+        restaurant.getAvailabilitySchedule().setCapacity(slot, 4);
+        Reservation reservation = manager.createRequest(customer, restaurant, slot, 2).orElseThrow();
+
+        manager.acceptReservation(reservation);
+
+        assertTrue(manager.getNotificationsForCustomer(customer).stream()
+                .allMatch(notification -> notification.getCustomer().equals(customer)));
+        assertTrue(manager.getNotificationsForCustomer(customer).stream()
+                .anyMatch(notification -> notification.getMessage().contains("PENDING")));
+        assertTrue(manager.getNotificationsForCustomer(customer).stream()
+                .anyMatch(notification -> notification.getMessage().contains("Accepted")));
+        assertTrue(manager.getNotificationsForCustomer(customer).stream()
+                .noneMatch(notification -> notification.isRead()));
+        assertTrue(manager.getNotificationsForCustomer(otherCustomer).isEmpty());
+    }
+
+    @Test
+    void reviewsAreStoredFilteredAndValidated() {
+        Restaurant restaurant = new Restaurant("restaurant-1", "Test Bistro", "1 Main St", 40);
+        Restaurant otherRestaurant = new Restaurant("restaurant-2", "Other Bistro", "2 Main St", 40);
+        Customer customer = new Customer("user-1", "customer-1", "Ava Customer", "ava@example.com", "555-0100");
+        ReservationManager manager = new ReservationManager("manager-1");
+
+        Review review = manager.submitReview(customer, restaurant, 5, " Great dinner service. ");
+
+        assertEquals(customer, review.getCustomer());
+        assertEquals(restaurant, review.getRestaurant());
+        assertEquals(5, review.getRating());
+        assertEquals("Great dinner service.", review.getComment());
+        assertEquals(1, restaurant.getReviews().size());
+        assertEquals(1, manager.getReviews().size());
+        assertEquals(1, manager.getReviewsForRestaurant(restaurant).size());
+        assertTrue(manager.getReviewsForRestaurant(otherRestaurant).isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> manager.submitReview(customer, restaurant, 0, "Too low."));
+        assertThrows(IllegalArgumentException.class, () -> manager.submitReview(customer, restaurant, 6, "Too high."));
+        assertThrows(IllegalArgumentException.class, () -> manager.submitReview(customer, restaurant, 5, " "));
     }
 
     @Test
@@ -206,6 +296,31 @@ class ReservationManagerTest {
         assertEquals(1, restaurant.getAvailabilitySchedule().getCapacity(slot));
         assertThrows(IllegalStateException.class, () -> manager.acceptReservation(secondReservation));
         assertEquals(ReservationStatus.PENDING, secondReservation.getStatus());
+    }
+
+    @Test
+    void staffOnlySeesWaitlistRecordsForAssignedRestaurant() {
+        Restaurant restaurant = new Restaurant("restaurant-1", "Test Bistro", "1 Main St", 40);
+        Restaurant otherRestaurant = new Restaurant("restaurant-2", "Other Bistro", "2 Main St", 40);
+        Customer firstCustomer = new Customer("user-1", "customer-1", "Ava Customer", "ava@example.com", "555-0100");
+        Customer secondCustomer = new Customer("user-2", "customer-2", "Ben Customer", "ben@example.com", "555-0101");
+        Staff staff = new Staff("staff-user-1", "staff-1", "Sam Staff", "sam@example.com", "555-0102", "Server", restaurant);
+        Staff otherStaff = new Staff("staff-user-2", "staff-2", "Mia Staff", "mia@example.com", "555-0103", "Server", otherRestaurant);
+        ReservationManager manager = new ReservationManager("manager-1");
+        LocalDateTime slot = LocalDateTime.now().plusDays(1);
+        restaurant.getAvailabilitySchedule().setCapacity(slot, 1);
+        otherRestaurant.getAvailabilitySchedule().setCapacity(slot, 1);
+
+        manager.joinWaitlist(firstCustomer, restaurant, slot, 2);
+        manager.joinWaitlist(secondCustomer, otherRestaurant, slot, 2);
+
+        assertEquals(2, manager.getWaitlistRecords().size());
+        assertEquals(1, manager.getWaitlistRecordsForStaff(staff).size());
+        assertEquals(restaurant, manager.getWaitlistRecordsForStaff(staff).getFirst().restaurant());
+        assertEquals(firstCustomer, manager.getWaitlistRecordsForStaff(staff).getFirst().entry().getCustomer());
+        assertEquals(1, manager.getWaitlistRecordsForStaff(otherStaff).size());
+        assertEquals(otherRestaurant, manager.getWaitlistRecordsForStaff(otherStaff).getFirst().restaurant());
+        assertEquals(secondCustomer, manager.getWaitlistRecordsForStaff(otherStaff).getFirst().entry().getCustomer());
     }
 
     @Test
