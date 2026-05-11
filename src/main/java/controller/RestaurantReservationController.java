@@ -40,7 +40,7 @@ import model.Restaurant;
 import model.Review;
 import model.Staff;
 import service.ReservationManager;
-import service.ReservationManager.WaitlistRecord;
+import service.WaitlistRecord;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;

@@ -7,7 +7,6 @@ import model.ReservationStatus;
 import model.Restaurant;
 import model.Review;
 import model.Staff;
-import model.WaitlistEntry;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -17,13 +16,15 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Core business service for availability, reservations, waitlists, and reviews.
+ * Core business service for availability and reservation status workflows.
  */
 public class ReservationManager {
     private String managerId;
     private DataStore dataStore;
     private ValidationService validationService;
     private NotificationService notificationService;
+    private ReviewService reviewService;
+    private WaitlistService waitlistService;
 
     public ReservationManager(String managerId) {
         this(managerId, new DataStore(), new ValidationService(), new NotificationService());
@@ -39,6 +40,7 @@ public class ReservationManager {
         this.dataStore = dataStore;
         this.validationService = validationService;
         this.notificationService = notificationService;
+        refreshSupportingServices();
     }
 
     public String getManagerId() {
@@ -55,6 +57,7 @@ public class ReservationManager {
 
     public void setDataStore(DataStore dataStore) {
         this.dataStore = dataStore;
+        refreshSupportingServices();
     }
 
     public ValidationService getValidationService() {
@@ -63,6 +66,7 @@ public class ReservationManager {
 
     public void setValidationService(ValidationService validationService) {
         this.validationService = validationService;
+        refreshSupportingServices();
     }
 
     public NotificationService getNotificationService() {
@@ -71,6 +75,7 @@ public class ReservationManager {
 
     public void setNotificationService(NotificationService notificationService) {
         this.notificationService = notificationService;
+        refreshSupportingServices();
     }
 
     public boolean searchAvailability(Restaurant restaurant, LocalDateTime dateTime, int partySize) {
@@ -101,25 +106,11 @@ public class ReservationManager {
     }
 
     public List<WaitlistRecord> getWaitlistRecords() {
-        return dataStore.getAllRestaurants().stream()
-                .flatMap(restaurant -> restaurant.getWaitlist().listEntries().stream()
-                        .map(entry -> new WaitlistRecord(restaurant, entry)))
-                .sorted(Comparator
-                        .comparing(
-                                (WaitlistRecord record) -> record.entry().getRequestedDateTime(),
-                                Comparator.nullsLast(Comparator.naturalOrder())
-                        )
-                        .thenComparing(
-                                record -> record.entry().getJoinedAt(),
-                                Comparator.nullsLast(Comparator.naturalOrder())
-                        ))
-                .toList();
+        return waitlistService.getWaitlistRecords();
     }
 
     public List<WaitlistRecord> getWaitlistRecordsForStaff(Staff staff) {
-        return getWaitlistRecords().stream()
-                .filter(record -> restaurantMatchesStaff(staff, record.restaurant()))
-                .toList();
+        return waitlistService.getWaitlistRecordsForStaff(staff);
     }
 
     public List<Reservation> getReservationsForCustomer(Customer customer) {
@@ -154,20 +145,11 @@ public class ReservationManager {
     }
 
     public List<Review> getReviews() {
-        return dataStore.getAllReviews().stream()
-                .sorted(Comparator.comparing(Review::getCreatedAt).reversed())
-                .toList();
+        return reviewService.getReviews();
     }
 
     public List<Review> getReviewsForRestaurant(Restaurant restaurant) {
-        if (restaurant == null) {
-            throw new IllegalArgumentException("Restaurant is required.");
-        }
-        return dataStore.getAllReviews().stream()
-                .filter(review -> review.getRestaurant() != null)
-                .filter(review -> restaurant.getRestaurantId().equals(review.getRestaurant().getRestaurantId()))
-                .sorted(Comparator.comparing(Review::getCreatedAt).reversed())
-                .toList();
+        return reviewService.getReviewsForRestaurant(restaurant);
     }
 
     public Optional<Reservation> createRequest(
@@ -350,97 +332,19 @@ public class ReservationManager {
     }
 
     public Review submitReview(Customer customer, Restaurant restaurant, int rating, String comment) {
-        validationService.validateReview(customer, restaurant, rating, comment);
-        Review review = new Review(UUID.randomUUID().toString(), customer, restaurant, rating, comment.trim());
-        restaurant.addReview(review);
-        dataStore.addReview(review);
-        return review;
+        return reviewService.submitReview(customer, restaurant, rating, comment);
     }
 
     public boolean joinWaitlist(Customer customer, Restaurant restaurant, LocalDateTime dateTime, int partySize) {
-        validationService.validateReservationRequest(customer, restaurant, dateTime, partySize);
-        if (searchAvailability(restaurant, dateTime, partySize)) {
-            return false;
-        }
-
-        WaitlistEntry entry = new WaitlistEntry(
-                UUID.randomUUID().toString(),
-                customer,
-                dateTime,
-                partySize,
-                LocalDateTime.now()
-        );
-        restaurant.getWaitlist().addEntry(entry);
-        dataStore.addCustomer(customer);
-        dataStore.addRestaurant(restaurant);
-        notificationService.sendCustomerNotification(customer, "No capacity is available. You were added to the waitlist.");
-        return true;
+        return waitlistService.joinWaitlist(customer, restaurant, dateTime, partySize);
     }
 
     public Optional<Reservation> promoteNextWaitlistEntry(Restaurant restaurant, LocalDateTime dateTime) {
-        if (restaurant == null) {
-            throw new IllegalArgumentException("Restaurant is required.");
-        }
-        if (dateTime == null) {
-            throw new IllegalArgumentException("Reservation date and time is required.");
-        }
-
-        Optional<WaitlistEntry> nextEntry = restaurant.getWaitlist().listEntries().stream()
-                .filter(entry -> dateTime.equals(entry.getRequestedDateTime()))
-                .findFirst();
-
-        if (nextEntry.isEmpty()) {
-            return Optional.empty();
-        }
-
-        WaitlistEntry entry = nextEntry.get();
-        if (!restaurant.getAvailability(dateTime, entry.getPartySize())) {
-            return Optional.empty();
-        }
-        if (hasActiveReservationAt(entry.getCustomer(), dateTime)) {
-            return Optional.empty();
-        }
-
-        Reservation reservation = new Reservation(
-                UUID.randomUUID().toString(),
-                entry.getCustomer(),
-                restaurant,
-                entry.getRequestedDateTime(),
-                entry.getPartySize(),
-                ReservationStatus.PENDING
-        );
-
-        restaurant.addReservation(reservation);
-        entry.getCustomer().addReservationId(reservation.getReservationId());
-        restaurant.getWaitlist().removeEntry(entry);
-        dataStore.addCustomer(entry.getCustomer());
-        dataStore.addRestaurant(restaurant);
-        dataStore.addReservation(reservation);
-        notificationService.sendCustomerNotification(
-                entry.getCustomer(),
-                "A table opened up at " + restaurant.getName() + ". Your waitlist request is now PENDING."
-        );
-        notificationService.sendRestaurantNotification(
-                restaurant,
-                "A waitlisted customer was promoted to a pending reservation."
-        );
-        return Optional.of(reservation);
+        return waitlistService.promoteNextWaitlistEntry(restaurant, dateTime);
     }
 
     public void routeToWaitlist(Customer customer, Restaurant restaurant) {
-        if (customer == null) {
-            throw new IllegalArgumentException("Customer is required.");
-        }
-        if (restaurant == null) {
-            throw new IllegalArgumentException("Restaurant is required.");
-        }
-        restaurant.getWaitlist().addCustomer(customer);
-        dataStore.addCustomer(customer);
-        dataStore.addRestaurant(restaurant);
-        notificationService.sendCustomerNotification(customer, "No capacity is available. You were added to the waitlist.");
-    }
-
-    public record WaitlistRecord(Restaurant restaurant, WaitlistEntry entry) {
+        waitlistService.routeToWaitlist(customer, restaurant);
     }
 
     private void validateReservationForStatusChange(Reservation reservation) {
@@ -496,6 +400,11 @@ public class ReservationManager {
         if (staff.getRestaurant() != null && !restaurantMatchesStaff(staff, reservation.getRestaurant())) {
             throw new IllegalStateException("Staff can only manage reservations for their assigned restaurant.");
         }
+    }
+
+    private void refreshSupportingServices() {
+        this.reviewService = new ReviewService(dataStore, validationService);
+        this.waitlistService = new WaitlistService(dataStore, validationService, notificationService);
     }
 
     private String normalizeEmail(String email) {

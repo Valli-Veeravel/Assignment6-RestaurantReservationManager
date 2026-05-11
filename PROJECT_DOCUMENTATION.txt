@@ -45,6 +45,8 @@ Single Responsibility
 Each class has a focused purpose:
 Model classes store domain data and simple behavior.
 ReservationManager handles reservation workflow rules.
+WaitlistService handles waitlist records, duplicate waitlist entries, and waitlist promotion.
+ReviewService handles review submission, review validation delegation, and review filtering.
 DataStore handles in-memory storage.
 ValidationService handles input validation.
 NotificationService handles messages.
@@ -79,9 +81,10 @@ This keeps UI code separate from domain classes.
 
 Service Layer
 
-ReservationManager sits between the controller and domain objects.
+ReservationManager sits between the controller and domain objects for reservation workflow.
 The controller delegates business operations to it.
-This centralizes reservation rules and makes them easier to test.
+ReservationManager delegates focused waitlist behavior to WaitlistService and review behavior to ReviewService.
+This centralizes reservation rules while keeping separate services easier to test and maintain.
 
 Factory Pattern
 
@@ -124,12 +127,18 @@ Valid reservation requests create PENDING reservations.
 Customers and staff can log in with email and password.
 Availability search validates party size, restaurant, date/time, and capacity.
 Customers are waitlisted when capacity is unavailable.
+Duplicate waitlist entries for the same customer, date/time, and party size are ignored.
+Staff only see waitlist records for their assigned restaurant.
+Waitlisted customers can be promoted when accepted reservations are cancelled.
 Accepting a reservation reduces capacity.
 Cancelling a reservation releases capacity.
+Cancelling a pending reservation does not release capacity.
 Invalid input is rejected.
 Customers cannot create duplicate active reservations at the same date/time.
 Staff acceptance checks availability again.
 Staff can only manage pending reservations for their own restaurant.
+Reviews can be submitted, filtered by restaurant, and validated.
+Customer notifications are stored for the affected customer.
 
 Manual Scripted Tests
 
@@ -179,6 +188,8 @@ ReservationManager
 DataStore
 ValidationService
 NotificationService
+WaitlistService
+ReviewService
 
 Design changes included:
 Adding JavaFX screens after backend tests.
@@ -186,6 +197,9 @@ Adding CustomerNotification.
 Adding WaitlistEntry.
 Adding staff restaurant assignment.
 Adding duplicate reservation checks.
+Splitting review behavior into ReviewService.
+Splitting waitlist behavior into WaitlistService.
+Adding waitlist promotion after accepted reservation cancellation.
 Splitting MainApp and RestaurantReservationApplication.
 Removing placeholder package-info.java files.
 
