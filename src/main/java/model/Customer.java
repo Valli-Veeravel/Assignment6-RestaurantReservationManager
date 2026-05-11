@@ -54,14 +54,19 @@ public class Customer extends User {
     }
 
     public boolean cancelReservation(ReservationManager manager, String reservationId) {
-        boolean updated = manager.updateReservationStatus(reservationId, ReservationStatus.CANCELLED);
-        if (updated) {
-            removeReservationId(reservationId);
-        }
-        return updated;
+        return manager.cancelReservation(reservationId);
     }
 
     public boolean searchAvailability(Restaurant restaurant, LocalDateTime dateTime, int partySize) {
         return restaurant.getAvailability(dateTime, partySize);
+    }
+
+    public boolean searchAvailability(
+            ReservationManager manager,
+            Restaurant restaurant,
+            LocalDateTime dateTime,
+            int partySize
+    ) {
+        return manager.searchAvailability(restaurant, dateTime, partySize);
     }
 }

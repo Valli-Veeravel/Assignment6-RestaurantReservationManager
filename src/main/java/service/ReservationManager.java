@@ -63,6 +63,11 @@ public class ReservationManager {
         this.notificationService = notificationService;
     }
 
+    public boolean searchAvailability(Restaurant restaurant, LocalDateTime dateTime, int partySize) {
+        validationService.validateAvailabilitySearch(restaurant, dateTime, partySize);
+        return restaurant.getAvailability(dateTime, partySize);
+    }
+
     public Optional<Reservation> createRequest(
             Customer customer,
             Restaurant restaurant,
@@ -71,8 +76,8 @@ public class ReservationManager {
     ) {
         validationService.validateReservationRequest(customer, restaurant, dateTime, partySize);
 
-        if (!restaurant.getAvailability(dateTime, partySize)) {
-            routeToWaitlist(customer, restaurant);
+        if (!searchAvailability(restaurant, dateTime, partySize)) {
+            joinWaitlist(customer, restaurant, dateTime, partySize);
             return Optional.empty();
         }
 
@@ -94,6 +99,84 @@ public class ReservationManager {
         return Optional.of(reservation);
     }
 
+    public boolean acceptReservation(String reservationId) {
+        return findReservation(reservationId)
+                .map(reservation -> {
+                    acceptReservation(reservation);
+                    return true;
+                })
+                .orElse(false);
+    }
+
+    public void acceptReservation(Reservation reservation) {
+        validateReservationForStatusChange(reservation);
+        ensurePending(reservation, ReservationStatus.ACCEPTED);
+
+        if (!searchAvailability(reservation.getRestaurant(), reservation.getDateTime(), reservation.getPartySize())) {
+            throw new IllegalStateException("Cannot accept reservation because capacity is no longer available.");
+        }
+
+        reservation.getRestaurant()
+                .getAvailabilitySchedule()
+                .reserveSlot(reservation.getDateTime(), reservation.getPartySize());
+        reservation.updateStatus(ReservationStatus.ACCEPTED);
+        notificationService.sendCustomerNotification(
+                reservation.getCustomer(),
+                "Reservation status updated to ACCEPTED."
+        );
+    }
+
+    public boolean denyReservation(String reservationId) {
+        return findReservation(reservationId)
+                .map(reservation -> {
+                    denyReservation(reservation);
+                    return true;
+                })
+                .orElse(false);
+    }
+
+    public void denyReservation(Reservation reservation) {
+        validateReservationForStatusChange(reservation);
+        ensurePending(reservation, ReservationStatus.DENIED);
+        reservation.updateStatus(ReservationStatus.DENIED);
+        notificationService.sendCustomerNotification(
+                reservation.getCustomer(),
+                "Reservation status updated to DENIED."
+        );
+    }
+
+    public boolean cancelReservation(String reservationId) {
+        return findReservation(reservationId)
+                .map(reservation -> {
+                    cancelReservation(reservation);
+                    return true;
+                })
+                .orElse(false);
+    }
+
+    public void cancelReservation(Reservation reservation) {
+        validateReservationForStatusChange(reservation);
+
+        if (reservation.getStatus() == ReservationStatus.CANCELLED) {
+            return;
+        }
+        if (reservation.getStatus() == ReservationStatus.DENIED) {
+            throw new IllegalStateException("Denied reservations cannot be cancelled.");
+        }
+        if (reservation.getStatus() == ReservationStatus.ACCEPTED) {
+            reservation.getRestaurant()
+                    .getAvailabilitySchedule()
+                    .releaseSlot(reservation.getDateTime(), reservation.getPartySize());
+        }
+
+        reservation.updateStatus(ReservationStatus.CANCELLED);
+        reservation.getCustomer().removeReservationId(reservation.getReservationId());
+        notificationService.sendCustomerNotification(
+                reservation.getCustomer(),
+                "Reservation status updated to CANCELLED."
+        );
+    }
+
     public boolean updateReservationStatus(String reservationId, ReservationStatus newStatus) {
         return findReservation(reservationId)
                 .map(reservation -> {
@@ -111,33 +194,30 @@ public class ReservationManager {
             throw new IllegalArgumentException("Reservation status is required.");
         }
 
-        ReservationStatus previousStatus = reservation.getStatus();
-
-        if (newStatus == ReservationStatus.ACCEPTED && previousStatus != ReservationStatus.ACCEPTED) {
-            if (!reservation.getRestaurant().getAvailability(reservation.getDateTime(), reservation.getPartySize())) {
-                throw new IllegalStateException("Cannot accept reservation because capacity is no longer available.");
+        switch (newStatus) {
+            case PENDING -> {
+                if (reservation.getStatus() != ReservationStatus.PENDING) {
+                    throw new IllegalStateException("Only new reservations can be pending.");
+                }
             }
-            reservation.getRestaurant()
-                    .getAvailabilitySchedule()
-                    .reserveSlot(reservation.getDateTime(), reservation.getPartySize());
+            case ACCEPTED -> acceptReservation(reservation);
+            case DENIED -> denyReservation(reservation);
+            case CANCELLED -> cancelReservation(reservation);
         }
-
-        if (previousStatus == ReservationStatus.ACCEPTED
-                && (newStatus == ReservationStatus.CANCELLED || newStatus == ReservationStatus.DENIED)) {
-            reservation.getRestaurant()
-                    .getAvailabilitySchedule()
-                    .releaseSlot(reservation.getDateTime(), reservation.getPartySize());
-        }
-
-        reservation.updateStatus(newStatus);
-        notificationService.sendCustomerNotification(
-                reservation.getCustomer(),
-                "Reservation status updated to " + newStatus + "."
-        );
     }
 
     public Optional<Reservation> findReservation(String reservationId) {
         return dataStore.findReservationById(reservationId);
+    }
+
+    public boolean joinWaitlist(Customer customer, Restaurant restaurant, LocalDateTime dateTime, int partySize) {
+        validationService.validateReservationRequest(customer, restaurant, dateTime, partySize);
+        if (searchAvailability(restaurant, dateTime, partySize)) {
+            return false;
+        }
+
+        routeToWaitlist(customer, restaurant);
+        return true;
     }
 
     public void routeToWaitlist(Customer customer, Restaurant restaurant) {
@@ -151,5 +231,23 @@ public class ReservationManager {
         dataStore.addCustomer(customer);
         dataStore.addRestaurant(restaurant);
         notificationService.sendCustomerNotification(customer, "No capacity is available. You were added to the waitlist.");
+    }
+
+    private void validateReservationForStatusChange(Reservation reservation) {
+        if (reservation == null) {
+            throw new IllegalArgumentException("Reservation is required.");
+        }
+        validationService.validateReservationRequest(
+                reservation.getCustomer(),
+                reservation.getRestaurant(),
+                reservation.getDateTime(),
+                reservation.getPartySize()
+        );
+    }
+
+    private void ensurePending(Reservation reservation, ReservationStatus targetStatus) {
+        if (reservation.getStatus() != ReservationStatus.PENDING) {
+            throw new IllegalStateException("Only pending reservations can be marked " + targetStatus + ".");
+        }
     }
 }

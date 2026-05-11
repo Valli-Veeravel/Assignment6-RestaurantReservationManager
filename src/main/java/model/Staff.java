@@ -35,10 +35,10 @@ public class Staff extends User {
     }
 
     public boolean approveReservation(ReservationManager manager, String reservationId) {
-        return manager.updateReservationStatus(reservationId, ReservationStatus.ACCEPTED);
+        return manager.acceptReservation(reservationId);
     }
 
     public boolean denyReservation(ReservationManager manager, String reservationId) {
-        return manager.updateReservationStatus(reservationId, ReservationStatus.DENIED);
+        return manager.denyReservation(reservationId);
     }
 }

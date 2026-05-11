@@ -26,15 +26,11 @@ public class ValidationService {
         return rating >= 1 && rating <= 5;
     }
 
-    public void validateReservationRequest(
-            Customer customer,
+    public void validateAvailabilitySearch(
             Restaurant restaurant,
             LocalDateTime dateTime,
             int partySize
     ) {
-        if (customer == null) {
-            throw new IllegalArgumentException("Customer is required.");
-        }
         if (restaurant == null) {
             throw new IllegalArgumentException("Restaurant is required.");
         }
@@ -44,5 +40,20 @@ public class ValidationService {
         if (!isValidPartySize(partySize)) {
             throw new IllegalArgumentException("Party size must be positive.");
         }
+        if (partySize > restaurant.getMaxCapacity()) {
+            throw new IllegalArgumentException("Party size cannot exceed restaurant maximum capacity.");
+        }
+    }
+
+    public void validateReservationRequest(
+            Customer customer,
+            Restaurant restaurant,
+            LocalDateTime dateTime,
+            int partySize
+    ) {
+        if (customer == null) {
+            throw new IllegalArgumentException("Customer is required.");
+        }
+        validateAvailabilitySearch(restaurant, dateTime, partySize);
     }
 }
