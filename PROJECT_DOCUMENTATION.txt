@@ -1,0 +1,267 @@
+Restaurant Reservation Manager Documentation
+
+Design Principles
+
+The project uses object-oriented design to keep the reservation system organized,
+maintainable, and easy to extend.
+
+Encapsulation
+
+Model classes keep fields private.
+Access is provided through constructors, getters, setters, and focused methods.
+
+Examples:
+Reservation manages status through updateStatus.
+AvailabilitySchedule manages capacity through hasCapacity, reserveSlot, and releaseSlot.
+Waitlist manages customer queue access through add, remove, peek, and list methods.
+
+Abstraction and Inheritance
+
+User is an abstract base class.
+It stores shared account information such as:
+User ID
+Name
+Email
+Phone number
+Password
+
+Customer and Staff extend User.
+They share account fields but have different roles in the reservation workflow.
+
+Composition
+
+Larger domain objects are built from smaller objects.
+
+Restaurant contains:
+AvailabilitySchedule
+Waitlist
+Reservations
+Reviews
+
+This keeps restaurant-related data grouped together.
+
+Single Responsibility
+
+Each class has a focused purpose:
+Model classes store domain data and simple behavior.
+ReservationManager handles reservation workflow rules.
+DataStore handles in-memory storage.
+ValidationService handles input validation.
+NotificationService handles messages.
+JavaFX controller handles screen changes and user interaction.
+
+Separation of Concerns
+
+UI code is separated from business logic.
+The JavaFX controller collects input and displays results.
+Reservation decisions are handled by the service layer.
+
+Defensive Design
+
+The service layer rejects invalid operations such as:
+Past reservation times
+Missing customers or restaurants
+Invalid party sizes
+Parties larger than restaurant capacity
+Duplicate active reservations at the same date/time
+Staff actions on reservations outside their restaurant
+
+
+Design Patterns
+
+Model-View-Controller
+
+The project follows an MVC-style structure.
+The model package contains domain objects.
+The view package contains JavaFX launch classes.
+The controller package contains RestaurantReservationController.
+This keeps UI code separate from domain classes.
+
+Service Layer
+
+ReservationManager sits between the controller and domain objects.
+The controller delegates business operations to it.
+This centralizes reservation rules and makes them easier to test.
+
+Factory Pattern
+
+DemoDataFactory creates sample data used when the app launches.
+
+It creates:
+Restaurants
+Users
+Schedules
+Reservations
+Waitlist entries
+Reviews
+
+This keeps demo setup separate from JavaFX startup code.
+
+Repository-like In-Memory Store
+
+DataStore provides add, find, and list methods.
+
+It stores:
+Customers
+Staff
+Restaurants
+Reservations
+Reviews
+
+It hides storage details from the rest of the program.
+
+
+Testing
+
+Automated JUnit Tests
+
+Automated tests are located in:
+src/test/java/test/ReservationManagerTest.java
+
+Tests check that:
+Availability capacity can be reserved, reduced, checked, and released.
+Valid reservation requests create PENDING reservations.
+Customers and staff can log in with email and password.
+Availability search validates party size, restaurant, date/time, and capacity.
+Customers are waitlisted when capacity is unavailable.
+Accepting a reservation reduces capacity.
+Cancelling a reservation releases capacity.
+Invalid input is rejected.
+Customers cannot create duplicate active reservations at the same date/time.
+Staff acceptance checks availability again.
+Staff can only manage pending reservations for their own restaurant.
+
+Manual Scripted Tests
+
+Manual tests cover:
+Customer login
+Invalid login
+Searching availability
+Creating reservation requests
+Preventing duplicate reservations
+Waitlist flow
+Customer notifications
+Staff pending reservation visibility
+Staff accepting reservations
+Staff denying reservations
+Staff waitlist visibility
+Customer reservation cancellation
+Reviews screen
+Account information screen
+
+
+Design Process
+
+The project began with:
+UML class diagram
+Assignment requirements
+
+The first design focused on:
+Domain model
+Service classes
+Backend logic before JavaFX UI
+
+This made it easier to test reservation rules before building screens.
+
+Initial model classes included:
+User
+Customer
+Staff
+Restaurant
+Reservation
+ReservationStatus
+AvailabilitySchedule
+Waitlist
+Review
+
+Service layer classes included:
+ReservationManager
+DataStore
+ValidationService
+NotificationService
+
+Design changes included:
+Adding JavaFX screens after backend tests.
+Adding CustomerNotification.
+Adding WaitlistEntry.
+Adding staff restaurant assignment.
+Adding duplicate reservation checks.
+Splitting MainApp and RestaurantReservationApplication.
+Removing placeholder package-info.java files.
+
+Main design lesson:
+Separating the service layer from the UI makes changes easier.
+Features like notifications, staff filtering, waitlist visibility, and duplicate
+checks could be tested before connecting them to the UI.
+
+
+Build Instructions
+
+Directory Structure
+
+Main source code is under:
+src/main/java
+
+Main packages include:
+controller
+model
+service
+view
+
+Resources are under:
+src/main/resources
+
+CSS file:
+styles/app.css
+
+Tests are under:
+src/test/java/test
+
+Main test file:
+ReservationManagerTest.java
+
+Requirements
+
+Java 21
+Maven
+Internet access for the first Maven dependency download
+
+Commands
+
+Compile the project:
+mvn clean compile
+
+Run tests:
+mvn test
+
+Run the JavaFX app:
+mvn javafx:run
+
+Run from an IDE:
+Launch view.MainApp
+
+
+Demo Login Accounts
+
+Customer: Ava Customer
+Email: ava@example.com
+Password: ava123
+
+Customer: Ben Customer
+Email: ben@example.com
+Password: ben123
+
+Staff: Sam Staff
+Role: Server at Downtown Bistro
+Email: sam@example.com
+Password: sam123
+
+Staff: Mia Manager
+Role: Manager at Garden Table
+Email: mia@example.com
+Password: mia123
+
+Staff: Leo Harbor
+Role: Server at Harbor Grill
+Email: leo@example.com
+Password: leo123
