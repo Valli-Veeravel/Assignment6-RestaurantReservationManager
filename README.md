@@ -1,16 +1,16 @@
 # Restaurant Reservation Manager
 
-Initial Maven JavaFX project skeleton for the CS151 Assignment 6 Restaurant Reservation Manager.
+Maven JavaFX project for the CS151 Assignment 6 Restaurant Reservation Manager.
 
-This version focuses on the domain model and core service layer only. The JavaFX UI will be added later after the backend classes are stable.
+This version includes the domain model, service layer, JavaFX screens, seeded demo data, and JUnit tests for the reservation workflow.
 
 ## Project Layout
 
 - `src/main/java/model` - domain classes such as users, restaurants, reservations, schedules, waitlists, and reviews
 - `src/main/java/service` - core service skeletons for reservation management, validation, notifications, and in-memory storage
-- `src/main/java/controller` - placeholder package for future JavaFX controllers
-- `src/main/java/view` - placeholder package for future JavaFX views/resources
-- `src/test/java/test` - JUnit 5 smoke tests
+- `src/main/java/controller` - JavaFX screen/controller coordination
+- `src/main/java/view` - JavaFX launch classes
+- `src/test/java/test` - JUnit 5 tests
 
 ## Build
 
@@ -29,6 +29,8 @@ mvn test
 ```bash
 mvn javafx:run
 ```
+
+You can also run `view.MainApp` from an IDE. `MainApp` is a plain launcher class, and the JavaFX `Application` subclass is kept in `view.RestaurantReservationApplication` so IDE run buttons work more reliably.
 
 The app opens with a login / role selection screen. Use one of the seeded demo accounts to test the reservation, waitlist, approval, cancellation, and review workflows.
 

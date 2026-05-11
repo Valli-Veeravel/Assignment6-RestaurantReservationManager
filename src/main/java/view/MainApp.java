@@ -1,24 +1,16 @@
 package view;
 
-import controller.RestaurantReservationController;
 import javafx.application.Application;
-import javafx.stage.Stage;
-import service.DemoDataFactory;
 
 /**
- * JavaFX entry point for the restaurant reservation application.
+ * Plain Java launcher for the restaurant reservation application.
+ *
+ * Keeping this class separate from the JavaFX Application subclass makes it
+ * easier to run MainApp directly from IDEs that do not automatically configure
+ * JavaFX module launch options.
  */
-public class MainApp extends Application {
-    @Override
-    public void start(Stage stage) {
-        RestaurantReservationController controller = new RestaurantReservationController(
-                stage,
-                DemoDataFactory.createDemoManager()
-        );
-        controller.showLoginScreen();
-    }
-
+public class MainApp {
     public static void main(String[] args) {
-        launch(args);
+        Application.launch(RestaurantReservationApplication.class, args);
     }
 }
