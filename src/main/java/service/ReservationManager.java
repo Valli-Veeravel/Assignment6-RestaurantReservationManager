@@ -294,8 +294,10 @@ public class ReservationManager {
         if (reservation.getStatus() == ReservationStatus.DENIED) {
             throw new IllegalStateException("Denied reservations cannot be cancelled.");
         }
+        boolean wasAccepted = reservation.getStatus() == ReservationStatus.ACCEPTED;
+
         // Only accepted reservations have consumed capacity, so only they release seats.
-        if (reservation.getStatus() == ReservationStatus.ACCEPTED) {
+        if (wasAccepted) {
             reservation.getRestaurant()
                     .getAvailabilitySchedule()
                     .releaseSlot(reservation.getDateTime(), reservation.getPartySize());
@@ -307,6 +309,10 @@ public class ReservationManager {
                 reservation.getCustomer(),
                 "Reservation status updated to CANCELLED."
         );
+
+        if (wasAccepted) {
+            promoteNextWaitlistEntry(reservation.getRestaurant(), reservation.getDateTime());
+        }
     }
 
     public boolean updateReservationStatus(String reservationId, ReservationStatus newStatus) {
@@ -369,6 +375,56 @@ public class ReservationManager {
         dataStore.addRestaurant(restaurant);
         notificationService.sendCustomerNotification(customer, "No capacity is available. You were added to the waitlist.");
         return true;
+    }
+
+    public Optional<Reservation> promoteNextWaitlistEntry(Restaurant restaurant, LocalDateTime dateTime) {
+        if (restaurant == null) {
+            throw new IllegalArgumentException("Restaurant is required.");
+        }
+        if (dateTime == null) {
+            throw new IllegalArgumentException("Reservation date and time is required.");
+        }
+
+        Optional<WaitlistEntry> nextEntry = restaurant.getWaitlist().listEntries().stream()
+                .filter(entry -> dateTime.equals(entry.getRequestedDateTime()))
+                .findFirst();
+
+        if (nextEntry.isEmpty()) {
+            return Optional.empty();
+        }
+
+        WaitlistEntry entry = nextEntry.get();
+        if (!restaurant.getAvailability(dateTime, entry.getPartySize())) {
+            return Optional.empty();
+        }
+        if (hasActiveReservationAt(entry.getCustomer(), dateTime)) {
+            return Optional.empty();
+        }
+
+        Reservation reservation = new Reservation(
+                UUID.randomUUID().toString(),
+                entry.getCustomer(),
+                restaurant,
+                entry.getRequestedDateTime(),
+                entry.getPartySize(),
+                ReservationStatus.PENDING
+        );
+
+        restaurant.addReservation(reservation);
+        entry.getCustomer().addReservationId(reservation.getReservationId());
+        restaurant.getWaitlist().removeEntry(entry);
+        dataStore.addCustomer(entry.getCustomer());
+        dataStore.addRestaurant(restaurant);
+        dataStore.addReservation(reservation);
+        notificationService.sendCustomerNotification(
+                entry.getCustomer(),
+                "A table opened up at " + restaurant.getName() + ". Your waitlist request is now PENDING."
+        );
+        notificationService.sendRestaurantNotification(
+                restaurant,
+                "A waitlisted customer was promoted to a pending reservation."
+        );
+        return Optional.of(reservation);
     }
 
     public void routeToWaitlist(Customer customer, Restaurant restaurant) {

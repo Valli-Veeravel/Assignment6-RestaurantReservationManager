@@ -69,6 +69,10 @@ public class Waitlist {
         }
     }
 
+    public boolean removeEntry(WaitlistEntry entry) {
+        return queuedEntries.remove(entry);
+    }
+
     public boolean removeCustomer(Customer customer) {
         return queuedEntries.removeIf(entry -> entry.getCustomer().equals(customer));
     }

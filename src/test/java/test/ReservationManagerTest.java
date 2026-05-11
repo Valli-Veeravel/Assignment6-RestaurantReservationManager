@@ -126,6 +126,35 @@ class ReservationManagerTest {
     }
 
     @Test
+    void cancellingAcceptedReservationPromotesNextWaitlistedCustomer() {
+        Restaurant restaurant = new Restaurant("restaurant-1", "Test Bistro", "1 Main St", 40);
+        Customer firstCustomer = new Customer("user-1", "customer-1", "Ava Customer", "ava@example.com", "555-0100");
+        Customer waitlistedCustomer = new Customer("user-2", "customer-2", "Ben Customer", "ben@example.com", "555-0101");
+        ReservationManager manager = new ReservationManager("manager-1");
+        LocalDateTime slot = LocalDateTime.now().plusDays(1);
+        restaurant.getAvailabilitySchedule().setCapacity(slot, 2);
+        Reservation acceptedReservation = manager.createRequest(firstCustomer, restaurant, slot, 2).orElseThrow();
+        manager.acceptReservation(acceptedReservation);
+
+        Optional<Reservation> waitlistResult = manager.createRequest(waitlistedCustomer, restaurant, slot, 2);
+
+        assertTrue(waitlistResult.isEmpty());
+        assertEquals(1, restaurant.getWaitlist().size());
+
+        manager.cancelReservation(acceptedReservation);
+
+        assertEquals(0, restaurant.getWaitlist().size());
+        assertEquals(1, manager.getReservationsForCustomer(waitlistedCustomer).size());
+        Reservation promotedReservation = manager.getReservationsForCustomer(waitlistedCustomer).getFirst();
+        assertEquals(ReservationStatus.PENDING, promotedReservation.getStatus());
+        assertEquals(waitlistedCustomer, promotedReservation.getCustomer());
+        assertEquals(slot, promotedReservation.getDateTime());
+        assertEquals(2, restaurant.getAvailabilitySchedule().getCapacity(slot));
+        assertTrue(manager.getNotificationsForCustomer(waitlistedCustomer).stream()
+                .anyMatch(notification -> notification.getMessage().contains("waitlist request is now PENDING")));
+    }
+
+    @Test
     void reservationRequestRejectsInvalidInput() {
         Restaurant restaurant = new Restaurant("restaurant-1", "Test Bistro", "1 Main St", 4);
         Customer customer = new Customer("user-1", "customer-1", "Ava Customer", "ava@example.com", "555-0100");
